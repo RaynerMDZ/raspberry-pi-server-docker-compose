@@ -118,6 +118,9 @@ services:
         container_name: grafana
         ports:
             - 9200:3000
+        environment:
+            - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD}
+            - GF_SECURITY_ADMIN_USER=${ADMIN_USERNAME}
         volumes:
             - monitoring-data:/var/lib/grafana
         networks:
@@ -129,9 +132,6 @@ services:
         container_name: prometheus
         ports:
             - 9210:9090
-        environment:
-            - GF_SECURITY_ADMIN_USERNAME=${ADMIN_USERNAME}
-            - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD}
         volumes:
             - monitoring-data:/prometheus
             - ./prometheus.yaml:/etc/prometheus/prometheus.yaml
