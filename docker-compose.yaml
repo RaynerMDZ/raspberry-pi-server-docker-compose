@@ -1,0 +1,225 @@
+# Author: Rayner Mendez (RaynerMDZ)
+# Description: Creation of multiple services for dev and testing.
+
+# 90xx: LLM applications:
+#   *
+#   *
+# 91xx: Databases:
+#   * postgresql: 9100
+#   * mysql: 9110
+#   * mongo-db: 9120
+#   * redis: 9130
+#   * neo4j: Host 9140 - UI 9145
+# 92xx: monitoring and code analzisis:
+#   * Grafana: 9200
+#   * Prometheus: 9210
+#   * Sonarqube: 9220
+# 93xx: Messaging applications:
+#   * apache-kafka: 9300
+#   * zookeeper: 9310
+#   * rabbitmq: Host 9320 - UI 9325
+
+services:
+    postgresql:
+        image: postgres:latest
+        container_name: postgres
+        environment:
+            POSTGRES_PASSWORD: ${ADMIN_PASSWORD}
+        ports:
+            - "9100:5432"
+        volumes:
+            - postgres-data:/var/lib/postgres
+        restart: always
+
+    mysql:
+        image: mysql:8.0
+        container_name: mysql
+        environment:
+            MYSQL_ROOT_PASSWORD: ${ADMIN_PASSWORD}
+        ports:
+            - "9110:3306"
+        volumes:
+            - mysql-data:/var/lib/mysql
+        restart: always
+
+    mongodb:
+        image: arm64v8/mongo
+        container_name: mongodb
+        volumes:
+            - mongo-data:/data/db
+        networks:
+            - mongodb_network
+        ports:
+            - 9120:27017
+        restart: unless-stopped
+
+    mongo-express:
+        image: mongo-express
+        container_name: mongo-express
+        environment:
+            - ME_CONFIG_MONGODB_SERVER=mongodb
+        depends_on:
+            - mongodb
+        networks:
+            - mongodb_network
+        ports:
+            - 9125:8081
+        restart: always
+
+    redis:
+        image: arm64v8/redis
+        container_name: redis
+        ports:
+            - "9130:6379"
+        volumes:
+            - redis-data:/data
+        command: ["redis-server", "--appendonly", "yes"]
+        networks:
+            - redis-network
+        restart: always
+
+    redis-commander:
+        image: rediscommander/redis-commander
+        container_name: redis-commander
+        environment:
+            - REDIS_HOST=redis  # Connect to Redis service
+            - REDIS_PORT=6379   # Default Redis port
+            - REDIS_PASSWORD=   # Password if Redis is protected (leave empty if not)
+        ports:
+            - "9135:8081"  # Redis Commander web UI
+        depends_on:
+            - redis
+        networks:
+            - redis-network
+
+    neo4j:
+        image: neo4j:latest
+        container_name: neo4j
+        ports:
+            - "9140:7687"  # Bolt port for database connections
+            - "9145:7474"  # HTTP port for browser UI
+        environment:
+            - NEO4J_AUTH=neo4j/change_it # Default username/password
+            - NEO4J_dbms_memory_pagecache_size=2G
+            - NEO4J_dbms_memory_heap_initial__size=1G
+            - NEO4J_dbms_memory_heap_max__size=2G
+            - dbms.connectors.default_listen_address=0.0.0.0
+            - dbms.connector.bolt.listen_address=:9140
+            - dbms.connector.bolt.advertised_address=:9140
+        volumes:
+            - neo4j-data:/data
+            - neo4j-data:/logs
+            - neo4j-data:/var/lib/neo4j/import
+            - neo4j-data:/plugins
+        restart: always
+
+    grafana:
+        image: grafana/grafana:latest
+        container_name: grafana
+        ports:
+            - 9200:3000
+        volumes:
+            - monitoring-data:/var/lib/grafana
+        networks:
+            - metrics-network
+        restart: always
+
+    prometheus:
+        image: prom/prometheus:latest
+        container_name: prometheus
+        ports:
+            - 9210:9090
+        environment:
+            - GF_SECURITY_ADMIN_USERNAME=${ADMIN_USERNAME}
+            - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD}
+        volumes:
+            - monitoring-data:/prometheus
+            - ./prometheus.yaml:/etc/prometheus/prometheus.yaml
+        networks:
+            - metrics-network
+        restart: always
+
+    sonarqube:
+        image: sonarqube:latest
+        container_name: sonarqube
+        restart: unless-stopped
+        ports:
+          - "9220:9000" # Web UI
+        environment:
+            - SONARQUBE_JDBC_URL=jdbc:postgresql://postgres:9100/sonarqube
+            - SONAR_JDBC_USERNAME=sonar
+            - SONAR_JDBC_PASSWORD=sonar
+        volumes:
+            - sonarqube-data:/opt/sonarqube/data  # Persistent storage for data
+            - sonarqube-data:/opt/sonarqube/logs  # Persistent storage for logs
+            - sonarqube-data:/opt/sonarqube/extensions  # Persistent storage for plugins
+
+    apache-kafka:
+        image: confluentinc/cp-kafka:latest
+        container_name: kafka
+        ports:
+            - "9300:9092"
+        environment:
+            KAFKA_BROKER_ID: 1
+            KAFKA_ZOOKEEPER_CONNECT: zookeeper:9410
+            KAFKA_LISTENERS: PLAINTEXT://:9092
+            KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+            KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        volumes:
+            - apache-kafka-data:/var/lib/kafka
+        depends_on:
+            - zookeeper
+        restart: always
+
+    zookeeper:
+        image: confluentinc/cp-zookeeper:latest
+        container_name: zookeeper
+        ports:
+            - "9310:2181"
+        environment:
+            ZOOKEEPER_CLIENT_PORT: 2181
+            ZOOKEEPER_TICK_TIME: 2000
+        volumes:
+            - apache-kafka-data:/var/lib/zookeeper
+        restart: always
+
+    rabbitmq:
+        image: rabbitmq:management
+        container_name: rabbitmq
+        ports:
+            - "9320:5672"  # AMQP port for applications
+            - "9325:15672"  # Management UI port
+        environment:
+            - RABBITMQ_DEFAULT_USER=${ADMIN-USERNAME}
+            - RABBITMQ_DEFAULT_PASS=${ADMIN-PASSWORD}
+        volumes:
+            - rabbitmq-data:/var/lib/rabbitmq
+        restart: always
+
+networks:
+    metrics-network:
+        driver: bridge
+    mongodb_network:
+        driver: bridge
+    redis-network:
+        driver: bridge
+
+volumes:
+    monitoring-data:
+        driver: local
+    rabbitmq-data:
+        driver: local
+    apache-kafka-data:
+        driver: local
+    sonarqube-data:
+        driver: local
+    mysql-data:
+        driver: local
+    postgres-data:
+        driver: local
+    mongo-data:
+        driver: local
+    neo4j-data:
+        driver: local
+    redis-data:
+        driver: local
