@@ -10,10 +10,11 @@
 #   * mongo-db: 9120
 #   * redis: 9130
 #   * neo4j: Host 9140 - UI 9145
-# 92xx: monitoring and code analzisis:
+# 92xx: monitoring and code analisis:
 #   * Grafana: 9200
 #   * Prometheus: 9210
 #   * Sonarqube: 9220
+#   * Portainer: 9230
 # 93xx: Messaging applications:
 #   * apache-kafka: 9300
 #   * zookeeper: 9310
@@ -153,6 +154,19 @@ services:
             - sonarqube-data:/opt/sonarqube/data  # Persistent storage for data
             - sonarqube-data:/opt/sonarqube/logs  # Persistent storage for logs
             - sonarqube-data:/opt/sonarqube/extensions  # Persistent storage for plugins
+    
+    portainer:
+        image: portainer/portainer-ce:latest
+        container_name: portainer
+        restart: always
+        ports:
+            - "9230:9000"
+        environment:
+            - ADMIN_USERNAME = ${ADMIN-USERNAME}
+            - ADMIN_PASSWORD = ${ADMIN-PASSWORD}
+        volumes:
+            - portainer-data:/data  # Persistent storage for Portainer data
+            - /var/run/docker.sock:/var/run/docker.sock  # Allow Portainer to manage Docker
 
     apache-kafka:
         image: confluentinc/cp-kafka:latest
@@ -222,4 +236,6 @@ volumes:
     neo4j-data:
         driver: local
     redis-data:
+        driver: local
+    portainer-data:
         driver: local
